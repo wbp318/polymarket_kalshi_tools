@@ -75,12 +75,21 @@ not kill the polling loop.
 
 ## Architecture (why it's laid out this way)
 
+The scanned market is **Polymarket** (read-only, via the public gamma API). Kalshi is the intended US-legal **execution venue**: signals are generated from Polymarket, then each alert carries a link to the equivalent Kalshi market so a US user can act on the same event. That two-venue split runs through the whole architecture.
+
+### Where Kalshi lives today
+
+- `scanner/trade_guidance.py` — builds a Kalshi search URL from each market's event title / question. This is what powers the **Find on Kalshi** field on every Discord alert. No Kalshi API call, no price comparison — just a deep-linked search.
+- `feeds/base.py` — the `FeedAdapter` abstract interface. Kalshi's real integration will land as `feeds/kalshi.py` implementing this interface, which unlocks cross-market arb signals (Polymarket vs. Kalshi pricing on the same contract). Not wired in yet; see Roadmap.
+
+### Module map
+
 - `core/polymarket_client.py` — only talks to Polymarket gamma API. Returns `MarketSnapshot` dataclasses.
 - `core/discord_alerter.py` — only talks to Discord webhooks. Handles rate limits and retries.
 - `core/storage.py` — SQLite; snapshot table + signal log with dedup by key + time window.
 - `feeds/base.py` — `FeedAdapter` interface for future comparison feeds (Kalshi, Vegas via an odds API, Binance). Drop a new class in `feeds/`, wire it into the scanner, no other code changes needed.
 - `scanner/signals.py` — pure functions per signal type (`detect_volume_spike`, `detect_price_swing`, `detect_new_market`). Easy to add new ones.
-- `scanner/trade_guidance.py` — per-signal-type alert copy + Kalshi search URL builder.
+- `scanner/trade_guidance.py` — per-signal-type alert copy + Kalshi search URL builder (see "Where Kalshi lives today" above).
 - `scanner/loop.py` — the polling loop, dedup logic, and embed emission.
 - `main.py` — entry point: loads config, wires components, runs the scanner.
 - `smoke_test.py` — offline verification of Polymarket fetch, storage roundtrip, and signal detection math. Run with `.\venv\Scripts\python.exe smoke_test.py` before your first real run to confirm the stack works end-to-end on your machine.
