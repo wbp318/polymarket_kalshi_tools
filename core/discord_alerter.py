@@ -35,7 +35,7 @@ class DiscordAlerter:
         self._session = requests.Session()
 
     def send(self, embed: Embed) -> None:
-        payload = {"embeds": [self._serialize(embed)]}
+        payload = {"embeds": [_serialize(embed)]}
         for attempt in range(MAX_429_RETRIES):
             resp = self._session.post(self.webhook_url, json=payload, timeout=self.timeout)
             if resp.status_code == 429:
@@ -49,10 +49,6 @@ class DiscordAlerter:
             time.sleep(INTER_SEND_DELAY_SECONDS)
             return
         log.error("Discord webhook gave up after %d 429 retries", MAX_429_RETRIES)
-
-    @staticmethod
-    def _serialize(e: Embed) -> dict:  # noqa: D401
-        return _serialize(e)
 
 
 def _retry_after_seconds(resp: requests.Response) -> float:
@@ -72,18 +68,18 @@ def _retry_after_seconds(resp: requests.Response) -> float:
 
 
 def _serialize(e: Embed) -> dict:
-        payload = {
-            "title": e.title[:256],
-            "description": e.description[:4000],
-            "color": e.color,
-        }
-        if e.url:
-            payload["url"] = e.url
-        if e.fields:
-            payload["fields"] = [
-                {"name": n[:256], "value": v[:1024], "inline": inline}
-                for (n, v, inline) in e.fields
-            ]
-        if e.footer:
-            payload["footer"] = {"text": e.footer[:2048]}
-        return payload
+    payload = {
+        "title": e.title[:256],
+        "description": e.description[:4000],
+        "color": e.color,
+    }
+    if e.url:
+        payload["url"] = e.url
+    if e.fields:
+        payload["fields"] = [
+            {"name": n[:256], "value": v[:1024], "inline": inline}
+            for (n, v, inline) in e.fields
+        ]
+    if e.footer:
+        payload["footer"] = {"text": e.footer[:2048]}
+    return payload

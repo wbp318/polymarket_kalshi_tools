@@ -1,7 +1,6 @@
 import json
 import sqlite3
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
 
@@ -73,28 +72,19 @@ class Storage:
         )
 
     def latest_prior(self, market_id: str, before_ts: float) -> Optional[PriorSnapshot]:
-        row = self._conn.execute(
-            "SELECT fetched_at, yes_price, last_trade, volume_num, liquidity_num "
-            "FROM snapshots WHERE market_id = ? AND fetched_at < ? "
-            "ORDER BY fetched_at DESC LIMIT 1",
-            (market_id, before_ts),
-        ).fetchone()
-        if not row:
-            return None
-        return PriorSnapshot(
-            fetched_at=row["fetched_at"],
-            yes_price=row["yes_price"],
-            last_trade=row["last_trade"],
-            volume_num=row["volume_num"] or 0.0,
-            liquidity_num=row["liquidity_num"] or 0.0,
-        )
+        return self._read_prior(market_id, "<", before_ts)
 
     def prior_at_or_before(self, market_id: str, cutoff_ts: float) -> Optional[PriorSnapshot]:
+        return self._read_prior(market_id, "<=", cutoff_ts)
+
+    def _read_prior(self, market_id: str, op: str, ts: float) -> Optional[PriorSnapshot]:
+        # op is injected as a literal, not a bind parameter — must stay inside this module
+        assert op in ("<", "<="), f"unsupported comparison op: {op!r}"
         row = self._conn.execute(
             "SELECT fetched_at, yes_price, last_trade, volume_num, liquidity_num "
-            "FROM snapshots WHERE market_id = ? AND fetched_at <= ? "
+            f"FROM snapshots WHERE market_id = ? AND fetched_at {op} ? "
             "ORDER BY fetched_at DESC LIMIT 1",
-            (market_id, cutoff_ts),
+            (market_id, ts),
         ).fetchone()
         if not row:
             return None
@@ -124,13 +114,3 @@ class Storage:
             "VALUES (?,?,?,?,?)",
             (time.time(), signal_type, market_id, dedup_key, json.dumps(payload)),
         )
-
-    @contextmanager
-    def tx(self):
-        self._conn.execute("BEGIN")
-        try:
-            yield self._conn
-            self._conn.execute("COMMIT")
-        except Exception:
-            self._conn.execute("ROLLBACK")
-            raise

@@ -96,7 +96,8 @@ class Scanner:
     def _sleep(self, seconds: float) -> None:
         end = time.time() + seconds
         while not self._stop and time.time() < end:
-            time.sleep(min(0.5, end - time.time()))
+            remaining = end - time.time()
+            time.sleep(max(0.0, min(0.5, remaining)))
 
     def _cycle(self, tag_slug: str, max_events: int) -> None:
         now_ts = time.time()
@@ -123,13 +124,14 @@ class Scanner:
             for sig in signals:
                 if self.storage.recently_fired(sig.dedup_key, within_seconds=dedup_window):
                     continue
-                self._emit(sig)
+                # Record first so dedup locks in even if the webhook send fails.
                 self.storage.record_signal(sig.signal_type, sig.market.market_id, sig.dedup_key, {
                     "summary": sig.summary,
                     "details": sig.details,
                     "question": sig.market.question,
                     "url": sig.market.url,
                 })
+                self._emit(sig)
 
     def _detect(self, snap: MarketSnapshot, prior, baseline, known_before: set[str], cfg: dict) -> list[Signal]:
         results: list[Signal] = []

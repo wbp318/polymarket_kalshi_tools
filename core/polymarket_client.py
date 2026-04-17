@@ -82,7 +82,7 @@ def _parse_json_list(raw) -> list:
         return []
 
 
-def _to_float(v, default: float = 0.0) -> float:
+def _to_float(v, default: Optional[float] = 0.0) -> Optional[float]:
     if v is None:
         return default
     try:
@@ -107,9 +107,9 @@ def _market_to_snapshot(m: dict, event_id: str, event_slug: str, event_title: st
         question=str(m.get("question", "")),
         outcomes=outcomes,
         outcome_prices=prices,
-        last_trade_price=_to_float(m.get("lastTradePrice"), default=None) if m.get("lastTradePrice") is not None else None,
-        volume_num=_to_float(m.get("volumeNum")),
-        liquidity_num=_to_float(m.get("liquidityNum")),
+        last_trade_price=_to_float(m.get("lastTradePrice"), default=None),
+        volume_num=_to_float(m.get("volumeNum")) or 0.0,
+        liquidity_num=_to_float(m.get("liquidityNum")) or 0.0,
         end_date_iso=m.get("endDateIso"),
         fetched_at=now_ts,
     )
