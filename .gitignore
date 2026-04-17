@@ -12,3 +12,6 @@ config.yaml
 .idea/
 .vscode/
 .claude/
+
+# Personal local notes (not for the repo)
+*.local.txt
