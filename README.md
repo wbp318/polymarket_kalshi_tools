@@ -1,26 +1,32 @@
-# polymarket-tools
+# polymarket-kalshi-tools
 
-Market scanner for Polymarket. Polls a tag (MLB by default), detects volume
-spikes, price swings, and new markets, and posts alerts to Discord.
+Market scanner for Polymarket prediction markets, with per-signal trade-context
+and direct Kalshi search links so US users can act on the signal via a legal
+venue.
 
-Read-only. Does not place trades. US users: signals still work; verify and
-trade on Kalshi manually.
+Read-only — does not place trades. Posts alerts to a Discord channel of your
+choice via a webhook.
 
 ## First-time setup
 
 ```
-cd "C:/Users/Tap Parker Farms/Documents/polymarket_tools"
+git clone https://github.com/wbp318/polymarket_kalshi_tools.git
+cd polymarket_kalshi_tools
 
 # create a virtualenv
 python -m venv venv
 
 # install deps (works in any shell; no activation needed)
 .\venv\Scripts\python.exe -m pip install -r requirements.txt
+# macOS / Linux:
+# ./venv/bin/python -m pip install -r requirements.txt
 
 # create your config from the example
 copy config.example.yaml config.yaml     # PowerShell / CMD
-# or: cp config.example.yaml config.yaml # bash / Git Bash
-# then edit config.yaml and paste your Discord webhook URL
+# or: cp config.example.yaml config.yaml # bash / Git Bash / macOS / Linux
+
+# then edit config.yaml and paste your Discord webhook URL in place of
+# PASTE_YOUR_DISCORD_WEBHOOK_URL_HERE
 ```
 
 ## Run
@@ -34,8 +40,11 @@ Or with activation:
 - PowerShell: `.\venv\Scripts\Activate.ps1` then `python main.py`
 - bash / Git Bash: `source venv/Scripts/activate` then `python main.py`
 
-Stop with Ctrl+C. A `scanner.db` (SQLite) is created next to `main.py` and
-stores every snapshot + every signal fired — that's the performance log.
+Stop with `Ctrl+C`. A `scanner.db` (SQLite, WAL mode) is created next to
+`main.py` and stores every snapshot + every signal fired — that's the
+performance log you pay for once it becomes a product.
+
+See `RUNNING.txt` for a detailed start/stop/troubleshooting walkthrough.
 
 ## What it alerts on
 
@@ -48,12 +57,77 @@ stores every snapshot + every signal fired — that's the performance log.
 Tune thresholds in `config.yaml`. The first poll after starting is silent —
 we need a baseline before we can detect changes.
 
+## What each Discord alert contains
+
+Every fired signal posts a Discord embed with:
+
+- **Market link** — deep-links to the Polymarket page
+- **YES price / cumulative volume / liquidity** — current snapshot
+- **Event** — the parent event title, if different from the market question
+- **How to trade** — signal-type-specific playbook (copy lives in `scanner/trade_guidance.py`)
+- **Find on Kalshi** — a search link built from the market's event title / question, so US users can cross-reference the same event on a legal venue
+- **Disclaimer** — signals are starting points; verify on Kalshi/Polymarket before trading
+
+The Discord alerter respects Discord's 5-requests-per-2-seconds per-webhook
+limit with a 0.35s inter-send delay, and retries up to 5 times on 429
+responses using the server-provided `retry_after`. A single failing send does
+not kill the polling loop.
+
 ## Architecture (why it's laid out this way)
 
-- `core/polymarket_client.py` — only talks to Polymarket gamma API.
-- `core/discord_alerter.py` — only talks to Discord webhooks.
-- `core/storage.py` — SQLite; snapshots + signal log.
-- `feeds/base.py` — `FeedAdapter` interface for future comparison feeds (Kalshi, Vegas via Optimal MCP, Binance). Drop a new class in `feeds/`, wire it in the scanner, no other code changes.
-- `scanner/signals.py` — pure functions per signal type. Easy to add new ones.
-- `scanner/loop.py` — the polling loop, dedup, and emission.
-- `main.py` — entry point.
+- `core/polymarket_client.py` — only talks to Polymarket gamma API. Returns `MarketSnapshot` dataclasses.
+- `core/discord_alerter.py` — only talks to Discord webhooks. Handles rate limits and retries.
+- `core/storage.py` — SQLite; snapshot table + signal log with dedup by key + time window.
+- `feeds/base.py` — `FeedAdapter` interface for future comparison feeds (Kalshi, Vegas via an odds API, Binance). Drop a new class in `feeds/`, wire it into the scanner, no other code changes needed.
+- `scanner/signals.py` — pure functions per signal type (`detect_volume_spike`, `detect_price_swing`, `detect_new_market`). Easy to add new ones.
+- `scanner/trade_guidance.py` — per-signal-type alert copy + Kalshi search URL builder.
+- `scanner/loop.py` — the polling loop, dedup logic, and embed emission.
+- `main.py` — entry point: loads config, wires components, runs the scanner.
+- `smoke_test.py` — offline verification of Polymarket fetch, storage roundtrip, and signal detection math. Run with `.\venv\Scripts\python.exe smoke_test.py` before your first real run to confirm the stack works end-to-end on your machine.
+
+## Roadmap
+
+- [x] **Phase 1 — Polymarket MLB scanner → Discord alerts with trade context.** This repo today.
+- [ ] **Phase 2 — Kalshi feed.** Cross-market arb signals when Polymarket and Kalshi price the same contract differently.
+- [ ] **Phase 3 — Vegas / sportsbook feed.** Lag-vs-book signals when sportsbook odds move before the prediction markets catch up.
+- [ ] **Phase 4 — Web dashboard + multi-tenant config.** Per-user Discord channels, subscription billing, SaaS product shape.
+- [ ] **Phase 5 — Automated execution (Kalshi API).** Only after Phase 1's signal log proves a real edge.
+
+Other niches (crypto 5-minute rounds, politics, weather, economic data) are
+deliberately deferred to keep the sport-first MVP focused. Each is a new
+`FeedAdapter` + divergence rule when the time comes.
+
+## Discord channel topic
+
+If you're running this for a Discord audience, paste this into your channel
+topic (under 1024-char limit):
+
+```
+Real-time +EV signals for MLB prediction markets. A Python scanner polls Polymarket every 30s across 572 active MLB markets (futures + game/prop markets) and posts automated alerts here when something meaningful moves.
+
+Signal types:
+• Price swing — YES probability shifts >10% over 10 min
+• Volume spike — $100k+ fresh volume on a single market
+• New market (currently disabled)
+
+Each alert includes a "How to trade" playbook for that signal type and a Kalshi search link so US users can act on the same event via Kalshi.
+
+Source: https://github.com/wbp318/polymarket_kalshi_tools
+
+Clone and run your own:
+  git clone https://github.com/wbp318/polymarket_kalshi_tools.git
+  cd polymarket_kalshi_tools
+  python -m venv venv
+  ./venv/Scripts/python.exe -m pip install -r requirements.txt
+  (copy config.example.yaml to config.yaml, paste your Discord webhook URL)
+  ./venv/Scripts/python.exe main.py
+
+Not advice. Signals are starting points — verify on Kalshi or Polymarket before trading.
+```
+
+## Security / webhook handling
+
+- `config.yaml` is gitignored — your webhook URL never gets committed.
+- Only share your webhook URL with people you'd trust to post as your bot in that channel.
+- To rotate a leaked webhook: Discord → channel → Edit Channel → Integrations → Webhooks → delete the old webhook, create a new one, paste the new URL into `config.yaml`, restart the scanner.
+- Scanner error logs can contain the full webhook URL when HTTP errors occur — don't paste raw logs into public places without stripping URLs.
