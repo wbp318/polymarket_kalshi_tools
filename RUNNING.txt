@@ -1,0 +1,104 @@
+polymarket-tools — how to start and stop the scanner
+=====================================================
+
+QUICK START (PowerShell — your default shell)
+----------------------------------------------
+
+1. Open PowerShell.
+
+2. cd into the project:
+
+     cd "C:\Users\Tap Parker Farms\Documents\polymarket_tools"
+
+3. Start the scanner:
+
+     .\venv\Scripts\python.exe main.py
+
+   You'll see a "Scanner online" embed post to Discord.
+   Log lines will stream in the PowerShell window.
+
+4. Minimize the window. Scanner keeps running as long as it stays open.
+
+
+QUICK START (bash / Git Bash — alternative)
+-------------------------------------------
+
+     cd "C:/Users/Tap Parker Farms/Documents/polymarket_tools"
+     ./venv/Scripts/python.exe main.py
+
+
+HOW TO STOP
+-----------
+
+In the PowerShell window running the scanner:
+
+     Press Ctrl+C
+
+Scanner shuts down cleanly, "Stop requested, finishing current cycle..."
+is logged, then it exits.
+
+If you closed the window without Ctrl+C, find the stray python.exe in
+Task Manager and end it — or just reboot.
+
+
+HOW TO CHECK IT'S ALIVE
+-----------------------
+
+- Discord channel should be getting alerts (if anything has moved past
+  the thresholds).
+- PowerShell window shows a new "Fetched NNN markets" line every 30s.
+- scanner.db grows over time (SQLite file next to main.py).
+
+
+FIRST-TIME SETUP (only if you're on a fresh machine)
+----------------------------------------------------
+
+     cd "C:\Users\Tap Parker Farms\Documents\polymarket_tools"
+     python -m venv venv
+     .\venv\Scripts\python.exe -m pip install -r requirements.txt
+     copy config.example.yaml config.yaml
+     # then open config.yaml in a text editor and paste your
+     # Discord webhook URL in place of the PASTE_... placeholder
+
+
+CONFIG FILE
+-----------
+
+All tuning lives in config.yaml. Most-used knobs:
+
+  signals.volume_spike.min_dollar_increase     e.g. 100000 = very quiet
+  signals.price_swing.min_probability_change   e.g. 0.25   = very quiet
+  signals.new_market.enabled                   true | false
+  scanner.poll_interval_seconds                default 30
+  scanner.tag_slug                             default "mlb"
+
+Edit config.yaml, then Ctrl+C and restart the scanner to apply changes.
+
+
+TROUBLESHOOTING
+---------------
+
+"ValueError: Discord webhook URL is not configured."
+  → config.yaml still has the placeholder. Edit it and paste the real
+    webhook URL.
+
+"source: The term 'source' is not recognized..."
+  → You're in PowerShell, not bash. Don't use 'source'. Run the venv
+    python directly:  .\venv\Scripts\python.exe main.py
+
+"Scanner cycle failed" / 429 errors
+  → Discord rate limit. Scanner now auto-retries. If they persist,
+    raise thresholds in config.yaml so fewer signals fire per cycle.
+
+Nothing shows up in Discord even after several cycles
+  → Thresholds may be set too high. Try dropping
+    signals.volume_spike.min_dollar_increase and
+    signals.price_swing.min_probability_change, then restart.
+
+
+DATA LIVES HERE
+---------------
+
+  scanner.db          — every market snapshot + every signal fired
+  config.yaml         — your settings (gitignored; contains webhook URL)
+  venv/               — Python virtualenv (gitignored)

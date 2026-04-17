@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+config.yaml
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.log
+.env
+.idea/
+.vscode/
+.claude/

@@ -1,0 +1,26 @@
+discord:
+  webhook_url: "PASTE_YOUR_DISCORD_WEBHOOK_URL_HERE"
+
+scanner:
+  poll_interval_seconds: 30
+  tag_slug: "mlb"
+  max_events: 100
+
+signals:
+  volume_spike:
+    enabled: true
+    min_dollar_increase: 5000
+    min_ratio: 1.2
+  price_swing:
+    enabled: true
+    min_probability_change: 0.05
+    lookback_minutes: 10
+  new_market:
+    enabled: true
+  dedup_window_seconds: 600
+
+storage:
+  db_path: "scanner.db"
+
+logging:
+  level: "INFO"
