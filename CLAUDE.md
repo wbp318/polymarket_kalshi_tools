@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Other docs in this repo
+
+- **`README.md`** — public-facing setup, run, architecture, roadmap. Authoritative for anything user-facing.
+- **`RUNNING.txt`** — start/stop walkthrough, threshold tuning, troubleshooting. Written for the human operator, not for Claude.
+- **`CLAUDE_CODE_SKILLS.md`** — reference for Claude Code skills available in this environment. Not project-specific.
+- **`config.example.yaml`** — authoritative config schema. `config.yaml` (gitignored) is the user's real config and won't be readable from the repo.
+
+Project-specific Claude Code memory lives at `.claude/projects/<encoded-project-path>/memory/` in the user's home directory (outside this repo). It's auto-loaded and contains user preferences, prior feedback, and operational decisions that aren't derivable from the code.
+
 ## Commands
 
 Shell assumed is Windows PowerShell. `source venv/Scripts/activate` is **not** a PowerShell command — use the venv's python directly (works in any shell):
@@ -33,7 +42,9 @@ The scanner is one polling loop with a pluggable-feed shape. Three invariants ti
 
 ### First-cycle behavior
 
-`Scanner._first_cycle` is set to `True` on startup and `False` after the first completed cycle. While `_first_cycle` is `True`, snapshots are recorded to SQLite but **no signals are emitted** — this is deliberate; without a prior in-memory state, new-market detection would fire on every market. `price_swing` *can* still find baselines in a pre-existing `scanner.db` (it reads snapshots from disk with a 10-minute lookback), so historical data survives restarts.
+`Scanner._first_cycle` is set to `True` on startup and `False` after the first completed cycle. While `_first_cycle` is `True`, **snapshots are recorded but no signals of any type are emitted** — the `if self._first_cycle: continue` in `Scanner._cycle` short-circuits before `_detect` runs. This is deliberate; without a prior in-memory state, new-market detection would fire on every market, and the other detectors would see stale-looking baselines.
+
+However, *after* the first cycle completes, detectors that read from disk (`detect_price_swing` via `prior_at_or_before` with a 10-minute lookback) can find baselines in a pre-existing `scanner.db` immediately — historical data survives restarts even though the in-memory first-cycle flag resets. In practice, a restart produces meaningful price-swing alerts on cycle 2 if the DB has old-enough snapshots; volume-spike compares to the most recent prior snapshot (also from disk), so it also activates on cycle 2.
 
 ### Gamma API quirks that break if ignored
 
