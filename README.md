@@ -7,6 +7,37 @@ venue.
 Read-only — does not place trades. Posts alerts to a Discord channel of your
 choice via a webhook.
 
+## Project tree
+
+<pre>
+polymarket_kalshi_tools/
+├── <a href=".gitattributes">.gitattributes</a>
+├── <a href=".gitignore">.gitignore</a>
+├── <a href="CLAUDE.md">CLAUDE.md</a>
+├── <a href="CLAUDE_CODE_SKILLS.md">CLAUDE_CODE_SKILLS.md</a>
+├── <a href="README.md">README.md</a>
+├── <a href="RUNNING.txt">RUNNING.txt</a>
+├── <a href="config.example.yaml">config.example.yaml</a>
+├── <a href="main.py">main.py</a>
+├── <a href="requirements.txt">requirements.txt</a>
+├── <a href="smoke_test.py">smoke_test.py</a>
+├── core/
+│   ├── <a href="core/__init__.py">__init__.py</a>
+│   ├── <a href="core/discord_alerter.py">discord_alerter.py</a>
+│   ├── <a href="core/polymarket_client.py">polymarket_client.py</a>
+│   └── <a href="core/storage.py">storage.py</a>
+├── feeds/
+│   ├── <a href="feeds/__init__.py">__init__.py</a>
+│   └── <a href="feeds/base.py">base.py</a>
+└── scanner/
+    ├── <a href="scanner/__init__.py">__init__.py</a>
+    ├── <a href="scanner/loop.py">loop.py</a>
+    ├── <a href="scanner/signals.py">signals.py</a>
+    └── <a href="scanner/trade_guidance.py">trade_guidance.py</a>
+</pre>
+
+Runtime artifacts (gitignored, not in repo): *config.yaml* (your settings + webhook URL), *scanner.db* (SQLite snapshot + signal log), *venv/* (Python environment), *notes.local.txt* (personal operator runbook).
+
 ## First-time setup
 
 ```
@@ -40,11 +71,9 @@ Or with activation:
 - PowerShell: `.\venv\Scripts\Activate.ps1` then `python main.py`
 - bash / Git Bash: `source venv/Scripts/activate` then `python main.py`
 
-Stop with `Ctrl+C`. A `scanner.db` (SQLite, WAL mode) is created next to
-`main.py` and stores every snapshot + every signal fired — that's the
-performance log you pay for once it becomes a product.
+Stop with `Ctrl+C`. A *scanner.db* (SQLite, WAL mode) is created next to [main.py](main.py) and stores every snapshot + every signal fired — that's the performance log you pay for once it becomes a product.
 
-See `RUNNING.txt` for a detailed start/stop/troubleshooting walkthrough.
+See [RUNNING.txt](RUNNING.txt) for a detailed start/stop/troubleshooting walkthrough.
 
 ## What it alerts on
 
@@ -54,8 +83,7 @@ See `RUNNING.txt` for a detailed start/stop/troubleshooting walkthrough.
 | `volume_spike` | Cumulative volume jumped by at least `min_dollar_increase` between two polls AND ratio ≥ `min_ratio` |
 | `price_swing` | YES probability changed by ≥ `min_probability_change` versus the snapshot `lookback_minutes` ago |
 
-Tune thresholds in `config.yaml`. The first poll after starting is silent —
-we need a baseline before we can detect changes.
+Tune thresholds in *config.yaml* (see [config.example.yaml](config.example.yaml) for the schema). The first poll after starting is silent — we need a baseline before we can detect changes.
 
 ## What each Discord alert contains
 
@@ -64,14 +92,11 @@ Every fired signal posts a Discord embed with:
 - **Market link** — deep-links to the Polymarket page
 - **YES price / cumulative volume / liquidity** — current snapshot
 - **Event** — the parent event title, if different from the market question
-- **How to trade** — signal-type-specific playbook (copy lives in `scanner/trade_guidance.py`)
+- **How to trade** — signal-type-specific playbook (copy lives in [scanner/trade_guidance.py](scanner/trade_guidance.py))
 - **Find on Kalshi** — a search link built from the market's event title / question, so US users can cross-reference the same event on a legal venue
 - **Disclaimer** — signals are starting points; verify on Kalshi/Polymarket before trading
 
-The Discord alerter respects Discord's 5-requests-per-2-seconds per-webhook
-limit with a 0.35s inter-send delay, and retries up to 5 times on 429
-responses using the server-provided `retry_after`. A single failing send does
-not kill the polling loop.
+The Discord alerter respects Discord's 5-requests-per-2-seconds per-webhook limit with a 0.35s inter-send delay, and retries up to 5 times on 429 responses using the server-provided `retry_after`. A single failing send does not kill the polling loop.
 
 ## Architecture (why it's laid out this way)
 
@@ -79,20 +104,20 @@ The scanned market is **Polymarket** (read-only, via the public gamma API). Kals
 
 ### Where Kalshi lives today
 
-- `scanner/trade_guidance.py` — builds a Kalshi search URL from each market's event title / question. This is what powers the **Find on Kalshi** field on every Discord alert. No Kalshi API call, no price comparison — just a deep-linked search.
-- `feeds/base.py` — the `FeedAdapter` abstract interface. Kalshi's real integration will land as `feeds/kalshi.py` implementing this interface, which unlocks cross-market arb signals (Polymarket vs. Kalshi pricing on the same contract). Not wired in yet; see Roadmap.
+- [scanner/trade_guidance.py](scanner/trade_guidance.py) — builds a Kalshi search URL from each market's event title / question. This is what powers the **Find on Kalshi** field on every Discord alert. No Kalshi API call, no price comparison — just a deep-linked search.
+- [feeds/base.py](feeds/base.py) — the `FeedAdapter` abstract interface. Kalshi's real integration will land as feeds/kalshi.py implementing this interface, which unlocks cross-market arb signals (Polymarket vs. Kalshi pricing on the same contract). Not wired in yet; see Roadmap.
 
 ### Module map
 
-- `core/polymarket_client.py` — only talks to Polymarket gamma API. Returns `MarketSnapshot` dataclasses.
-- `core/discord_alerter.py` — only talks to Discord webhooks. Handles rate limits and retries.
-- `core/storage.py` — SQLite; snapshot table + signal log with dedup by key + time window.
-- `feeds/base.py` — `FeedAdapter` interface for future comparison feeds (Kalshi, Vegas via an odds API, Binance). Drop a new class in `feeds/`, wire it into the scanner, no other code changes needed.
-- `scanner/signals.py` — pure functions per signal type (`detect_volume_spike`, `detect_price_swing`, `detect_new_market`). Easy to add new ones.
-- `scanner/trade_guidance.py` — per-signal-type alert copy + Kalshi search URL builder (see "Where Kalshi lives today" above).
-- `scanner/loop.py` — the polling loop, dedup logic, and embed emission.
-- `main.py` — entry point: loads config, wires components, runs the scanner.
-- `smoke_test.py` — offline verification of Polymarket fetch, storage roundtrip, and signal detection math. Run with `.\venv\Scripts\python.exe smoke_test.py` before your first real run to confirm the stack works end-to-end on your machine.
+- [core/polymarket_client.py](core/polymarket_client.py) — only talks to Polymarket gamma API. Returns `MarketSnapshot` dataclasses.
+- [core/discord_alerter.py](core/discord_alerter.py) — only talks to Discord webhooks. Handles rate limits and retries.
+- [core/storage.py](core/storage.py) — SQLite; snapshot table + signal log with dedup by key + time window.
+- [feeds/base.py](feeds/base.py) — `FeedAdapter` interface for future comparison feeds (Kalshi, Vegas via an odds API, Binance). Drop a new class in feeds/, wire it into the scanner, no other code changes needed.
+- [scanner/signals.py](scanner/signals.py) — pure functions per signal type (`detect_volume_spike`, `detect_price_swing`, `detect_new_market`). Easy to add new ones.
+- [scanner/trade_guidance.py](scanner/trade_guidance.py) — per-signal-type alert copy + Kalshi search URL builder (see "Where Kalshi lives today" above).
+- [scanner/loop.py](scanner/loop.py) — the polling loop, dedup logic, and embed emission.
+- [main.py](main.py) — entry point: loads config, wires components, runs the scanner.
+- [smoke_test.py](smoke_test.py) — offline verification of Polymarket fetch, storage roundtrip, and signal detection math. Run with `.\venv\Scripts\python.exe smoke_test.py` before your first real run to confirm the stack works end-to-end on your machine.
 
 ## Roadmap
 
@@ -102,14 +127,11 @@ The scanned market is **Polymarket** (read-only, via the public gamma API). Kals
 - [ ] **Phase 4 — Web dashboard + multi-tenant config.** Per-user Discord channels, subscription billing, SaaS product shape.
 - [ ] **Phase 5 — Automated execution (Kalshi API).** Only after Phase 1's signal log proves a real edge.
 
-Other niches (crypto 5-minute rounds, politics, weather, economic data) are
-deliberately deferred to keep the sport-first MVP focused. Each is a new
-`FeedAdapter` + divergence rule when the time comes.
+Other niches (crypto 5-minute rounds, politics, weather, economic data) are deliberately deferred to keep the sport-first MVP focused. Each is a new `FeedAdapter` + divergence rule when the time comes.
 
 ## Discord channel topic
 
-If you're running this for a Discord audience, paste this into your channel
-topic (under 1024-char limit):
+If you're running this for a Discord audience, paste this into your channel topic (under 1024-char limit):
 
 ```
 Real-time +EV signals for MLB prediction markets. A Python scanner polls Polymarket every 30s across 572 active MLB markets (futures + game/prop markets) and posts automated alerts here when something meaningful moves.
@@ -136,7 +158,7 @@ Not advice. Signals are starting points — verify on Kalshi or Polymarket befor
 
 ## Security / webhook handling
 
-- `config.yaml` is gitignored — your webhook URL never gets committed.
+- *config.yaml* is gitignored — your webhook URL never gets committed.
 - Only share your webhook URL with people you'd trust to post as your bot in that channel.
-- To rotate a leaked webhook: Discord → channel → Edit Channel → Integrations → Webhooks → delete the old webhook, create a new one, paste the new URL into `config.yaml`, restart the scanner.
+- To rotate a leaked webhook: Discord → channel → Edit Channel → Integrations → Webhooks → delete the old webhook, create a new one, paste the new URL into *config.yaml*, restart the scanner.
 - Scanner error logs can contain the full webhook URL when HTTP errors occur — don't paste raw logs into public places without stripping URLs.
